@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite'
 import { FileImport } from '../import/FileImport'
 import { MetricsPanel } from '../metrics/MetricsPanel'
+import { FilterPanel } from '../filters/FilterPanel'
 import { ElevationChart } from '../chart/ElevationChart'
 import { ExportButton } from '../export/ExportButton'
 import { useStore } from '../../stores/StoreContext'
@@ -40,6 +41,7 @@ export const Sidebar = observer(function Sidebar() {
         <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
           <FileImport />
           <MetricsPanel />
+          <FilterPanel />
           <ElevationChart />
           <ExportButton />
         </div>

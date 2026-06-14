@@ -13,7 +13,7 @@ export const FitBoundsController = observer(function FitBoundsController() {
 
     const bounds = L.latLngBounds(trackStore.polylineCoords)
     map.fitBounds(bounds, { padding: [48, 48] })
-  }, [map, trackStore.fileName, trackStore.points])
+  }, [map, trackStore.fileName])
 
   return null
 })
