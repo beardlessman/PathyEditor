@@ -38,6 +38,10 @@ export const MetricsPanel = observer(function MetricsPanel() {
           label="Время"
           value={formatDuration(trackStore.totalDurationSeconds)}
         />
+        <MetricCard
+          label="Точки"
+          value={String(trackStore.points.length)}
+        />
       </div>
 
       {stats ? (
