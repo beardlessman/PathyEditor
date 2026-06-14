@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { MapContainer, Polyline, TileLayer, useMapEvents } from 'react-leaflet'
 import { observer } from 'mobx-react-lite'
 import { findNearestPointIndex, haversineDistance } from '../../utils/geo'
@@ -13,33 +12,80 @@ function TrackInteractionLayer() {
 
   useMapEvents({
     mousemove(event) {
-      if (!trackStore.hasTrack) return
-      const index = findNearestPointIndex(
-        trackStore.points,
-        event.latlng.lat,
-        event.latlng.lng,
-      )
-      const point = trackStore.points[index]
-      const distanceToTrack = haversineDistance(
-        point.lat,
-        point.lon,
-        event.latlng.lat,
-        event.latlng.lng,
-      )
+      const visibleTracks = trackStore.visibleTracks
+      if (visibleTracks.length === 0) return
 
-      trackStore.setHoveredIndex(distanceToTrack <= 80 ? index : null)
+      let nearestTrackId: string | null = null
+      let nearestIndex: number | null = null
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      for (const track of visibleTracks) {
+        const index = findNearestPointIndex(
+          track.points,
+          event.latlng.lat,
+          event.latlng.lng,
+        )
+        const point = track.points[index]
+        if (!point) continue
+
+        const distanceToTrack = haversineDistance(
+          point.lat,
+          point.lon,
+          event.latlng.lat,
+          event.latlng.lng,
+        )
+
+        if (distanceToTrack < nearestDistance) {
+          nearestDistance = distanceToTrack
+          nearestTrackId = track.id
+          nearestIndex = index
+        }
+      }
+
+      if (nearestDistance <= 80 && nearestTrackId !== null) {
+        trackStore.setHoveredTrack(nearestTrackId, nearestIndex)
+      } else {
+        trackStore.setHoveredTrack(null, null)
+      }
     },
     mouseout() {
-      trackStore.setHoveredIndex(null)
+      trackStore.setHoveredTrack(null, null)
     },
     click(event) {
-      if (!trackStore.hasTrack) return
-      const index = findNearestPointIndex(
-        trackStore.points,
-        event.latlng.lat,
-        event.latlng.lng,
-      )
-      trackStore.setSelectedIndex(index)
+      const visibleTracks = trackStore.visibleTracks
+      if (visibleTracks.length === 0) return
+
+      let nearestTrackId: string | null = null
+      let nearestIndex: number | null = null
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      for (const track of visibleTracks) {
+        const index = findNearestPointIndex(
+          track.points,
+          event.latlng.lat,
+          event.latlng.lng,
+        )
+        const point = track.points[index]
+        if (!point) continue
+
+        const distanceToTrack = haversineDistance(
+          point.lat,
+          point.lon,
+          event.latlng.lat,
+          event.latlng.lng,
+        )
+
+        if (distanceToTrack < nearestDistance) {
+          nearestDistance = distanceToTrack
+          nearestTrackId = track.id
+          nearestIndex = index
+        }
+      }
+
+      if (nearestTrackId !== null && nearestDistance <= 80) {
+        trackStore.setActiveTrack(nearestTrackId)
+        trackStore.setSelectedTrack(nearestTrackId, nearestIndex)
+      }
     },
   })
 
@@ -48,11 +94,6 @@ function TrackInteractionLayer() {
 
 export const TrackMap = observer(function TrackMap() {
   const { trackStore } = useStore()
-
-  const positions = useMemo(
-    () => trackStore.polylineCoords,
-    [trackStore.points],
-  )
 
   return (
     <MapContainer
@@ -68,12 +109,16 @@ export const TrackMap = observer(function TrackMap() {
 
       <FitBoundsController />
 
+      {trackStore.visibleTracks.map((track) => (
+        <Polyline
+          key={track.id}
+          positions={track.polylineCoords}
+          pathOptions={{ color: track.color, weight: 4, opacity: 0.9 }}
+        />
+      ))}
+
       {trackStore.hasTrack && (
         <>
-          <Polyline
-            positions={positions}
-            pathOptions={{ color: '#38bdf8', weight: 4, opacity: 0.9 }}
-          />
           <TrackMarkers />
           <TrackInteractionLayer />
         </>

@@ -9,11 +9,12 @@ export const FitBoundsController = observer(function FitBoundsController() {
   const { trackStore } = useStore()
 
   useEffect(() => {
-    if (!trackStore.hasTrack) return
+    const coords = trackStore.combinedBoundsCoords
+    if (coords.length === 0) return
 
-    const bounds = L.latLngBounds(trackStore.polylineCoords)
+    const bounds = L.latLngBounds(coords)
     map.fitBounds(bounds, { padding: [48, 48] })
-  }, [map, trackStore.fileName])
+  }, [map, trackStore.tracks.length, trackStore.visibleTracks.length])
 
   return null
 })

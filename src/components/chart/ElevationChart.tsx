@@ -13,19 +13,30 @@ export const ElevationChart = observer(function ElevationChart() {
   const { trackStore } = useStore()
   const data = trackStore.chartData
 
-  if (data.length === 0) {
+  if (!trackStore.hasTrack || data.length === 0) {
     return (
       <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400">
-        Профиль высот недоступен — в треке нет данных &lt;ele&gt;.
+        {trackStore.hasTrack
+          ? 'Профиль высот недоступен — в активном треке нет данных <ele>.'
+          : 'Загрузите GPX-файл для просмотра профиля высот.'}
       </section>
     )
   }
 
+  const activeTrack = trackStore.activeTrack
+
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Профиль высот
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Профиль высот
+        </h2>
+        {activeTrack && (
+          <span className="truncate text-xs text-slate-500" title={activeTrack.originalFileName}>
+            {activeTrack.originalFileName}
+          </span>
+        )}
+      </div>
 
       <div className="h-48 rounded-xl border border-slate-800 bg-slate-900/70 p-2">
         <ResponsiveContainer width="100%" height="100%">
@@ -34,12 +45,18 @@ export const ElevationChart = observer(function ElevationChart() {
             onMouseMove={(state) => {
               const chartIndex = state.activeIndex
               if (typeof chartIndex === 'number') {
-                trackStore.setHoveredIndex(data[chartIndex]?.index ?? null)
+                const activeTrack = trackStore.activeTrack
+                if (activeTrack) {
+                  trackStore.setHoveredTrack(
+                    activeTrack.id,
+                    data[chartIndex]?.index ?? null,
+                  )
+                }
                 return
               }
-              trackStore.setHoveredIndex(null)
+              trackStore.setHoveredTrack(null, null)
             }}
-            onMouseLeave={() => trackStore.setHoveredIndex(null)}
+            onMouseLeave={() => trackStore.setHoveredTrack(null, null)}
           >
             <XAxis
               dataKey="distanceKm"

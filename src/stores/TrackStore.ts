@@ -5,47 +5,65 @@ import {
   createDefaultFilterSettings,
   type FilterSettings,
 } from '../types/filters'
-import {
-  buildChartData,
-  computeDurationSeconds,
-  computeElevationStats,
-  computeTotalDistanceKm,
-} from '../utils/geo'
-import { buildExportFileName } from '../utils/gpx'
-import { applyFilterPipeline } from '../utils/filters/pipeline'
-import { cloneTrackPoints } from '../utils/filters/helpers'
+import { TRACK_COLORS } from '../types/trackItem'
+import { TrackItem } from './TrackItem'
+import { GpxParseError, parseGpx, validateGpxExtension } from '../utils/gpx'
+import { exportSelectedTracks } from '../utils/export'
 
 const FILTER_DEBOUNCE_MS = 175
 
 export class TrackStore {
-  rawPoints: TrackPoint[] = []
-  filterSettings: FilterSettings = createDefaultFilterSettings()
-  debouncedFilterSettings: FilterSettings = createDefaultFilterSettings()
-  fileName: string | null = null
+  tracks: TrackItem[] = []
+  globalFilterSettings: FilterSettings = createDefaultFilterSettings()
+  debouncedGlobalFilterSettings: FilterSettings = createDefaultFilterSettings()
+  activeTrackId: string | null = null
+  hoveredTrackId: string | null = null
   hoveredIndex: number | null = null
+  selectedTrackId: string | null = null
   selectedIndex: number | null = null
 
   private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  private colorIndex = 0
 
   constructor() {
     makeAutoObservable(this)
   }
 
-  get points(): TrackPoint[] {
-    if (this.rawPoints.length === 0) return []
-    return applyFilterPipeline(this.rawPoints, this.debouncedFilterSettings)
+  get hasTrack(): boolean {
+    return this.readyTracks.length > 0
   }
 
-  get hasTrack(): boolean {
-    return this.rawPoints.length > 0
+  get readyTracks(): TrackItem[] {
+    return this.tracks.filter((track) => track.status === 'ready')
+  }
+
+  get selectedTracks(): TrackItem[] {
+    return this.readyTracks.filter((track) => track.isSelected)
+  }
+
+  get visibleTracks(): TrackItem[] {
+    return this.selectedTracks
+  }
+
+  get activeTrack(): TrackItem | null {
+    if (this.activeTrackId) {
+      const track = this.tracks.find((item) => item.id === this.activeTrackId)
+      if (track?.status === 'ready') return track
+    }
+
+    return this.selectedTracks[0] ?? this.readyTracks[0] ?? null
+  }
+
+  get points(): TrackPoint[] {
+    return this.activeTrack?.points ?? []
   }
 
   get rawPointCount(): number {
-    return this.rawPoints.length
+    return this.readyTracks.reduce((sum, track) => sum + track.rawPointCount, 0)
   }
 
   get filteredPointCount(): number {
-    return this.points.length
+    return this.readyTracks.reduce((sum, track) => sum + track.filteredPointCount, 0)
   }
 
   get pointCountChangePercent(): number | null {
@@ -55,99 +73,224 @@ export class TrackStore {
   }
 
   get rawDistanceKm(): number {
-    return computeTotalDistanceKm(this.rawPoints)
-  }
-
-  get polylineCoords(): [number, number][] {
-    return this.points.map((point) => [point.lat, point.lon])
-  }
-
-  get startPoint(): TrackPoint | null {
-    return this.points[0] ?? null
-  }
-
-  get finishPoint(): TrackPoint | null {
-    return this.points[this.points.length - 1] ?? null
+    return this.readyTracks.reduce((sum, track) => sum + track.rawDistanceKm, 0)
   }
 
   get totalDistanceKm(): number {
-    return computeTotalDistanceKm(this.points)
+    return this.readyTracks.reduce((sum, track) => sum + track.totalDistanceKm, 0)
   }
 
   get totalDurationSeconds(): number | null {
-    return computeDurationSeconds(this.points)
+    return this.activeTrack?.totalDurationSeconds ?? null
   }
 
   get elevationStats(): ElevationStats | null {
-    return computeElevationStats(this.points)
+    return this.activeTrack?.elevationStats ?? null
   }
 
   get chartData(): ChartPoint[] {
-    return buildChartData(this.points)
-  }
-
-  get exportFileName(): string {
-    return buildExportFileName(this.points)
+    return this.activeTrack?.chartData ?? []
   }
 
   get hoveredPoint(): TrackPoint | null {
-    if (this.hoveredIndex === null) return null
-    return this.points[this.hoveredIndex] ?? null
+    if (this.hoveredTrackId === null || this.hoveredIndex === null) return null
+    const track = this.tracks.find((item) => item.id === this.hoveredTrackId)
+    return track?.points[this.hoveredIndex] ?? null
   }
 
-  loadTrack(points: TrackPoint[], fileName: string): void {
-    this.rawPoints = cloneTrackPoints(points)
-    this.fileName = fileName
+  get allVisiblePolylineCoords(): [number, number][][] {
+    return this.visibleTracks.map((track) => track.polylineCoords)
+  }
+
+  get combinedBoundsCoords(): [number, number][] {
+    return this.visibleTracks.flatMap((track) => track.polylineCoords)
+  }
+
+  async importFiles(files: FileList | File[]): Promise<void> {
+    const fileArray = Array.from(files).filter((file) =>
+      file.name.toLowerCase().endsWith('.gpx'),
+    )
+
+    if (fileArray.length === 0) return
+
+    const pendingTracks = fileArray.map((file) => {
+      const track = this.createTrackItem(file.name)
+      this.tracks.push(track)
+      return { track, file }
+    })
+
+    await Promise.all(
+      pendingTracks.map(async ({ track, file }) => {
+        try {
+          validateGpxExtension(file.name)
+          const text = await file.text()
+          const points = parseGpx(text)
+
+          if (points.length < 2) {
+            throw new GpxParseError('Трек должен содержать минимум 2 точки')
+          }
+
+          runInAction(() => {
+            track.setReady(points)
+            if (!this.activeTrackId) {
+              this.activeTrackId = track.id
+            }
+          })
+        } catch (error) {
+          const message =
+            error instanceof GpxParseError
+              ? error.message
+              : 'Не удалось загрузить GPX-файл'
+
+          runInAction(() => {
+            track.setError(message)
+          })
+        }
+      }),
+    )
+  }
+
+  removeTrack(id: string): void {
+    this.tracks = this.tracks.filter((track) => track.id !== id)
+
+    if (this.activeTrackId === id) {
+      this.activeTrackId = this.readyTracks[0]?.id ?? null
+    }
+
+    if (this.hoveredTrackId === id) {
+      this.hoveredTrackId = null
+      this.hoveredIndex = null
+    }
+
+    if (this.selectedTrackId === id) {
+      this.selectedTrackId = null
+      this.selectedIndex = null
+    }
+  }
+
+  clearAllTracks(): void {
+    this.tracks = []
+    this.activeTrackId = null
+    this.hoveredTrackId = null
     this.hoveredIndex = null
+    this.selectedTrackId = null
     this.selectedIndex = null
+    this.globalFilterSettings = createDefaultFilterSettings()
     this.flushDebouncedFilterUpdate()
   }
 
-  clearTrack(): void {
-    this.rawPoints = []
-    this.fileName = null
-    this.hoveredIndex = null
-    this.selectedIndex = null
-    this.filterSettings = createDefaultFilterSettings()
-    this.flushDebouncedFilterUpdate()
+  setActiveTrack(id: string): void {
+    const track = this.tracks.find((item) => item.id === id)
+    if (track?.status === 'ready') {
+      this.activeTrackId = id
+    }
+  }
+
+  toggleTrackSelected(id: string): void {
+    this.tracks.find((track) => track.id === id)?.toggleSelected()
+  }
+
+  selectAllTracks(): void {
+    for (const track of this.readyTracks) {
+      track.setSelected(true)
+    }
+  }
+
+  deselectAllTracks(): void {
+    for (const track of this.readyTracks) {
+      track.setSelected(false)
+    }
+  }
+
+  async exportSelected(): Promise<{ ok: boolean; message?: string }> {
+    const selected = this.selectedTracks
+    if (selected.length === 0) {
+      return { ok: false, message: 'Нет выбранных треков для экспорта' }
+    }
+
+    await exportSelectedTracks(
+      selected.map((track) => ({
+        points: track.points,
+        originalFileName: track.originalFileName,
+      })),
+    )
+
+    return { ok: true }
+  }
+
+  exportSingleTrack(id: string): { ok: boolean; message?: string } {
+    const track = this.tracks.find((item) => item.id === id)
+    if (!track || track.status !== 'ready') {
+      return { ok: false, message: 'Трек недоступен для экспорта' }
+    }
+
+    void exportSelectedTracks([
+      { points: track.points, originalFileName: track.originalFileName },
+    ])
+
+    return { ok: true }
   }
 
   setMovingAverageEnabled(enabled: boolean): void {
-    this.filterSettings.movingAverage.enabled = enabled
+    this.globalFilterSettings.movingAverage.enabled = enabled
     this.flushDebouncedFilterUpdate()
   }
 
   setMovingAverageWindowSize(windowSize: number): void {
-    this.filterSettings.movingAverage.windowSize = windowSize
+    this.globalFilterSettings.movingAverage.windowSize = windowSize
     this.scheduleDebouncedFilterUpdate()
   }
 
   setRdpEnabled(enabled: boolean): void {
-    this.filterSettings.rdp.enabled = enabled
+    this.globalFilterSettings.rdp.enabled = enabled
     this.flushDebouncedFilterUpdate()
   }
 
   setRdpTolerance(tolerance: number): void {
-    this.filterSettings.rdp.tolerance = tolerance
+    this.globalFilterSettings.rdp.tolerance = tolerance
     this.scheduleDebouncedFilterUpdate()
   }
 
   setChaikinEnabled(enabled: boolean): void {
-    this.filterSettings.chaikin.enabled = enabled
+    this.globalFilterSettings.chaikin.enabled = enabled
     this.flushDebouncedFilterUpdate()
   }
 
   setChaikinIterations(iterations: number): void {
-    this.filterSettings.chaikin.iterations = iterations
+    this.globalFilterSettings.chaikin.iterations = iterations
     this.scheduleDebouncedFilterUpdate()
+  }
+
+  setHoveredTrack(trackId: string | null, index: number | null): void {
+    this.hoveredTrackId = trackId
+    this.hoveredIndex = index
+  }
+
+  setSelectedTrack(trackId: string | null, index: number | null): void {
+    this.selectedTrackId = trackId
+    this.selectedIndex = index
   }
 
   setHoveredIndex(index: number | null): void {
     this.hoveredIndex = index
+    this.hoveredTrackId = this.activeTrack?.id ?? null
   }
 
   setSelectedIndex(index: number | null): void {
     this.selectedIndex = index
+    this.selectedTrackId = this.activeTrack?.id ?? null
+  }
+
+  private createTrackItem(originalFileName: string): TrackItem {
+    const color = TRACK_COLORS[this.colorIndex % TRACK_COLORS.length]
+    this.colorIndex += 1
+
+    return new TrackItem(
+      crypto.randomUUID(),
+      originalFileName,
+      color,
+      () => this.debouncedGlobalFilterSettings,
+    )
   }
 
   private scheduleDebouncedFilterUpdate(): void {
@@ -157,7 +300,7 @@ export class TrackStore {
 
     this.filterDebounceTimer = setTimeout(() => {
       runInAction(() => {
-        this.debouncedFilterSettings = cloneFilterSettings(this.filterSettings)
+        this.debouncedGlobalFilterSettings = cloneFilterSettings(this.globalFilterSettings)
       })
       this.filterDebounceTimer = null
     }, FILTER_DEBOUNCE_MS)
@@ -169,6 +312,6 @@ export class TrackStore {
       this.filterDebounceTimer = null
     }
 
-    this.debouncedFilterSettings = cloneFilterSettings(this.filterSettings)
+    this.debouncedGlobalFilterSettings = cloneFilterSettings(this.globalFilterSettings)
   }
 }

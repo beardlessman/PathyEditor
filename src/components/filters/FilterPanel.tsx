@@ -71,7 +71,7 @@ function formatChangePercent(percent: number | null): string {
 
 export const FilterPanel = observer(function FilterPanel() {
   const { trackStore } = useStore()
-  const { movingAverage, rdp, chaikin } = trackStore.filterSettings
+  const { movingAverage, rdp, chaikin } = trackStore.globalFilterSettings
   const changePercent = trackStore.pointCountChangePercent
 
   if (!trackStore.hasTrack) {
@@ -132,6 +132,9 @@ export const FilterPanel = observer(function FilterPanel() {
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs leading-relaxed text-slate-300">
         <p>
+          Треков:{' '}
+          <span className="font-semibold text-slate-100">{trackStore.readyTracks.length}</span>
+          {' · '}
           Точек в оригинале:{' '}
           <span className="font-semibold text-slate-100">{trackStore.rawPointCount}</span>
           {' ➡️ '}

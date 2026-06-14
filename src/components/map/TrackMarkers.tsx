@@ -3,6 +3,7 @@ import { CircleMarker, Marker, Popup, Tooltip } from 'react-leaflet'
 import { observer } from 'mobx-react-lite'
 import { formatLocalDateTime } from '../../utils/geo'
 import { useStore } from '../../stores/StoreContext'
+import type { TrackItem } from '../../stores/TrackItem'
 import type { TrackPoint } from '../../types/track'
 
 const hoverIcon = L.divIcon({
@@ -18,49 +19,66 @@ function pointLabel(point: TrackPoint): string {
   return `Время: ${time}\nВысота: ${elevation}`
 }
 
-export const TrackMarkers = observer(function TrackMarkers() {
-  const { trackStore } = useStore()
-  const start = trackStore.startPoint
-  const finish = trackStore.finishPoint
-  const hovered = trackStore.hoveredPoint
-  const selected =
-    trackStore.selectedIndex !== null
-      ? trackStore.points[trackStore.selectedIndex]
-      : null
+function TrackEndpoints({ track }: { track: TrackItem }) {
+  const start = track.points[0]
+  const finish = track.points[track.points.length - 1]
+
+  if (!start) return null
 
   return (
     <>
-      {start && (
-        <CircleMarker
-          center={[start.lat, start.lon]}
-          radius={8}
-          pathOptions={{ color: '#ffffff', fillColor: '#22c55e', fillOpacity: 1, weight: 2 }}
-        >
-          <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-            Старт
-          </Tooltip>
-          <Popup>
-            <div className="text-sm whitespace-pre-line">{pointLabel(start)}</div>
-          </Popup>
-        </CircleMarker>
-      )}
+      <CircleMarker
+        center={[start.lat, start.lon]}
+        radius={7}
+        pathOptions={{ color: '#ffffff', fillColor: track.color, fillOpacity: 1, weight: 2 }}
+      >
+        <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
+          Старт: {track.originalFileName}
+        </Tooltip>
+        <Popup>
+          <div className="text-sm whitespace-pre-line">{pointLabel(start)}</div>
+        </Popup>
+      </CircleMarker>
 
       {finish && finish !== start && (
         <CircleMarker
           center={[finish.lat, finish.lon]}
-          radius={8}
-          pathOptions={{ color: '#ffffff', fillColor: '#ef4444', fillOpacity: 1, weight: 2 }}
+          radius={7}
+          pathOptions={{ color: '#ffffff', fillColor: track.color, fillOpacity: 0.7, weight: 2 }}
         >
           <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-            Финиш
+            Финиш: {track.originalFileName}
           </Tooltip>
           <Popup>
             <div className="text-sm whitespace-pre-line">{pointLabel(finish)}</div>
           </Popup>
         </CircleMarker>
       )}
+    </>
+  )
+}
 
-      {hovered && (
+export const TrackMarkers = observer(function TrackMarkers() {
+  const { trackStore } = useStore()
+  const hovered = trackStore.hoveredPoint
+  const hoveredTrackId = trackStore.hoveredTrackId
+
+  const selectedTrack =
+    trackStore.selectedTrackId !== null
+      ? trackStore.tracks.find((track) => track.id === trackStore.selectedTrackId)
+      : null
+  const selectedPoint =
+    selectedTrack && trackStore.selectedIndex !== null
+      ? selectedTrack.points[trackStore.selectedIndex]
+      : null
+
+  return (
+    <>
+      {trackStore.visibleTracks.map((track) => (
+        <TrackEndpoints key={track.id} track={track} />
+      ))}
+
+      {hovered && hoveredTrackId && (
         <Marker position={[hovered.lat, hovered.lon]} icon={hoverIcon}>
           <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
             <span className="whitespace-pre-line">{pointLabel(hovered)}</span>
@@ -68,14 +86,14 @@ export const TrackMarkers = observer(function TrackMarkers() {
         </Marker>
       )}
 
-      {selected && (
+      {selectedPoint && (
         <CircleMarker
-          center={[selected.lat, selected.lon]}
+          center={[selectedPoint.lat, selectedPoint.lon]}
           radius={7}
           pathOptions={{ color: '#ffffff', fillColor: '#a855f7', fillOpacity: 1, weight: 2 }}
         >
           <Popup>
-            <div className="text-sm whitespace-pre-line">{pointLabel(selected)}</div>
+            <div className="text-sm whitespace-pre-line">{pointLabel(selectedPoint)}</div>
           </Popup>
         </CircleMarker>
       )}

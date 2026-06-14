@@ -13,7 +13,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 
 export const MetricsPanel = observer(function MetricsPanel() {
   const { trackStore } = useStore()
-  const stats = trackStore.elevationStats
 
   if (!trackStore.hasTrack) {
     return (
@@ -23,24 +22,34 @@ export const MetricsPanel = observer(function MetricsPanel() {
     )
   }
 
+  const activeTrack = trackStore.activeTrack
+  if (!activeTrack) return null
+
+  const stats = activeTrack.elevationStats
+
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Метрики
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Метрики
+        </h2>
+        <span className="truncate text-xs text-slate-500" title={activeTrack.originalFileName}>
+          {activeTrack.originalFileName}
+        </span>
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <MetricCard
           label="Длина"
-          value={`${trackStore.totalDistanceKm.toFixed(2)} км`}
+          value={`${activeTrack.totalDistanceKm.toFixed(2)} км`}
         />
         <MetricCard
           label="Время"
-          value={formatDuration(trackStore.totalDurationSeconds)}
+          value={formatDuration(activeTrack.totalDurationSeconds)}
         />
         <MetricCard
           label="Точки"
-          value={String(trackStore.points.length)}
+          value={String(activeTrack.filteredPointCount)}
         />
       </div>
 
