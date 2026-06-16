@@ -40,8 +40,8 @@ export function createDefaultFilterSettings(): FilterSettings {
   return {
     order: [...DEFAULT_FILTER_ORDER],
     stopFilter: { enabled: false, radius: 40, durationSeconds: 60 },
-    movingAverage: { enabled: false, windowSize: 5 },
-    rdp: { enabled: false, tolerance: 1.0 },
+    movingAverage: { enabled: false, windowSize: 17 },
+    rdp: { enabled: false, tolerance: 3.0 },
     chaikin: { enabled: false, iterations: 1 },
   }
 }
