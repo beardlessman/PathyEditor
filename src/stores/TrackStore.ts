@@ -3,6 +3,7 @@ import type { ChartPoint, ElevationStats, TrackPoint } from '../types/track'
 import {
   cloneFilterSettings,
   createDefaultFilterSettings,
+  type FilterId,
   type FilterSettings,
 } from '../types/filters'
 import { TRACK_COLOR } from '../types/trackItem'
@@ -273,6 +274,17 @@ export class TrackStore {
   setStopFilterDuration(durationSeconds: number): void {
     this.globalFilterSettings.stopFilter.durationSeconds = durationSeconds
     this.scheduleDebouncedFilterUpdate()
+  }
+
+  moveFilter(filterId: FilterId, toIndex: number): void {
+    const order = [...this.globalFilterSettings.order]
+    const fromIndex = order.indexOf(filterId)
+    if (fromIndex === -1 || fromIndex === toIndex) return
+
+    order.splice(fromIndex, 1)
+    order.splice(toIndex, 0, filterId)
+    this.globalFilterSettings.order = order
+    this.flushDebouncedFilterUpdate()
   }
 
   setHoveredTrack(trackId: string | null, index: number | null): void {

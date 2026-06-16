@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite'
-import { useState } from 'react'
-import { formatStopDuration } from '../../types/filters'
+import { type DragEvent, type ReactNode, useState } from 'react'
+import { formatStopDuration, type FilterId } from '../../types/filters'
 import { useStore } from '../../stores/StoreContext'
 
 interface FilterBlockProps {
@@ -92,9 +92,7 @@ function StopFilterBlock({
           onChange={(event) => onToggle(event.target.checked)}
         />
         <span>
-          <span className="block text-sm font-medium text-slate-100">
-            Фильтр остановок
-          </span>
+          <span className="block text-sm font-medium text-slate-100">Фильтр остановок</span>
           <span className="mt-0.5 block text-xs text-slate-500">
             Удаляет GPS-дрейф при длительных остановках
           </span>
@@ -110,7 +108,7 @@ function StopFilterBlock({
           <input
             type="range"
             min={5}
-            max={50}
+            max={100}
             step={5}
             value={radius}
             disabled={!enabled}
@@ -142,6 +140,65 @@ function StopFilterBlock({
   )
 }
 
+interface DraggableFilterWrapperProps {
+  filterId: FilterId
+  index: number
+  onMove: (filterId: FilterId, toIndex: number) => void
+  children: ReactNode
+}
+
+function DraggableFilterWrapper({
+  filterId,
+  index,
+  onMove,
+  children,
+}: DraggableFilterWrapperProps) {
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  const handleDragStart = (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.setData('text/filter-id', filterId)
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setIsDragOver(true)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(false)
+    const draggedId = event.dataTransfer.getData('text/filter-id') as FilterId
+    if (draggedId && draggedId !== filterId) {
+      onMove(draggedId, index)
+    }
+  }
+
+  return (
+    <div
+      className={`flex gap-2 rounded-xl transition ${
+        isDragOver ? 'bg-sky-950/40 ring-2 ring-sky-500/60' : ''
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    >
+      <button
+        type="button"
+        draggable
+        aria-label="Перетащить для изменения порядка"
+        title="Перетащите для изменения порядка"
+        className="mt-3 shrink-0 cursor-grab px-1 text-slate-500 hover:text-slate-300 active:cursor-grabbing"
+        onDragStart={handleDragStart}
+      >
+        ⠿
+      </button>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
 function formatChangePercent(percent: number | null): string {
   if (percent === null) return '—'
   const sign = percent > 0 ? '+' : ''
@@ -151,7 +208,7 @@ function formatChangePercent(percent: number | null): string {
 export const FilterPanel = observer(function FilterPanel() {
   const { trackStore } = useStore()
   const [isExpanded, setIsExpanded] = useState(true)
-  const { stopFilter, movingAverage, rdp, chaikin } = trackStore.globalFilterSettings
+  const { stopFilter, movingAverage, rdp, chaikin, order } = trackStore.globalFilterSettings
   const changePercent = trackStore.pointCountChangePercent
   const tracksWithoutTime = trackStore.readyTracks.filter((track) => !track.hasTimeData).length
 
@@ -161,6 +218,76 @@ export const FilterPanel = observer(function FilterPanel() {
         Загрузите GPX-файл, чтобы настроить фильтры обработки.
       </section>
     )
+  }
+
+  const renderFilter = (filterId: FilterId) => {
+    switch (filterId) {
+      case 'movingAverage':
+        return (
+          <FilterBlock
+            title="Шумоподавление"
+            description="Скользящее среднее для сглаживания микро-колебаний"
+            enabled={movingAverage.enabled}
+            onToggle={(enabled) => trackStore.setMovingAverageEnabled(enabled)}
+            sliderLabel="Размер окна"
+            sliderValue={`${movingAverage.windowSize} точек`}
+            sliderMin={3}
+            sliderMax={99}
+            sliderStep={2}
+            currentValue={movingAverage.windowSize}
+            onSliderChange={(value) => trackStore.setMovingAverageWindowSize(value)}
+          />
+        )
+
+      case 'rdp':
+        return (
+          <FilterBlock
+            title="Оптимизация (RDP)"
+            description="Удаление избыточных точек на прямых участках"
+            enabled={rdp.enabled}
+            onToggle={(enabled) => trackStore.setRdpEnabled(enabled)}
+            sliderLabel="Порог чувствительности"
+            sliderValue={`${rdp.tolerance.toFixed(1)} м`}
+            sliderMin={0.1}
+            sliderMax={10}
+            sliderStep={0.1}
+            currentValue={rdp.tolerance}
+            onSliderChange={(value) => trackStore.setRdpTolerance(value)}
+          />
+        )
+
+      case 'chaikin':
+        return (
+          <FilterBlock
+            title="Сглаживание (Чайкин)"
+            description="Скругление острых углов на поворотах"
+            enabled={chaikin.enabled}
+            onToggle={(enabled) => trackStore.setChaikinEnabled(enabled)}
+            sliderLabel="Степень сглаживания"
+            sliderValue={`${chaikin.iterations} ит.`}
+            sliderMin={1}
+            sliderMax={3}
+            sliderStep={1}
+            currentValue={chaikin.iterations}
+            onSliderChange={(value) => trackStore.setChaikinIterations(value)}
+          />
+        )
+
+      case 'stopFilter':
+        return (
+          <StopFilterBlock
+            enabled={stopFilter.enabled}
+            onToggle={(enabled) => trackStore.setStopFilterEnabled(enabled)}
+            radius={stopFilter.radius}
+            durationSeconds={stopFilter.durationSeconds}
+            onRadiusChange={(value) => trackStore.setStopFilterRadius(value)}
+            onDurationChange={(value) => trackStore.setStopFilterDuration(value)}
+          />
+        )
+
+      default:
+        return null
+    }
   }
 
   return (
@@ -184,14 +311,18 @@ export const FilterPanel = observer(function FilterPanel() {
 
       {isExpanded && (
         <div className="space-y-3">
-          <StopFilterBlock
-            enabled={stopFilter.enabled}
-            onToggle={(enabled) => trackStore.setStopFilterEnabled(enabled)}
-            radius={stopFilter.radius}
-            durationSeconds={stopFilter.durationSeconds}
-            onRadiusChange={(value) => trackStore.setStopFilterRadius(value)}
-            onDurationChange={(value) => trackStore.setStopFilterDuration(value)}
-          />
+          <p className="text-xs text-slate-500">Перетащите ⠿ для изменения порядка применения</p>
+
+          {order.map((filterId, index) => (
+            <DraggableFilterWrapper
+              key={filterId}
+              filterId={filterId}
+              index={index}
+              onMove={(id, toIndex) => trackStore.moveFilter(id, toIndex)}
+            >
+              {renderFilter(filterId)}
+            </DraggableFilterWrapper>
+          ))}
 
           {stopFilter.enabled && tracksWithoutTime > 0 && (
             <p className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
@@ -200,48 +331,6 @@ export const FilterPanel = observer(function FilterPanel() {
               метки времени
             </p>
           )}
-
-          <FilterBlock
-            title="Шумоподавление"
-            description="Скользящее среднее для сглаживания микро-колебаний"
-            enabled={movingAverage.enabled}
-            onToggle={(enabled) => trackStore.setMovingAverageEnabled(enabled)}
-            sliderLabel="Размер окна"
-            sliderValue={`${movingAverage.windowSize} точек`}
-            sliderMin={3}
-            sliderMax={99}
-            sliderStep={2}
-            currentValue={movingAverage.windowSize}
-            onSliderChange={(value) => trackStore.setMovingAverageWindowSize(value)}
-          />
-
-          <FilterBlock
-            title="Оптимизация (RDP)"
-            description="Удаление избыточных точек на прямых участках"
-            enabled={rdp.enabled}
-            onToggle={(enabled) => trackStore.setRdpEnabled(enabled)}
-            sliderLabel="Порог чувствительности"
-            sliderValue={`${rdp.tolerance.toFixed(1)} м`}
-            sliderMin={0.1}
-            sliderMax={10}
-            sliderStep={0.1}
-            currentValue={rdp.tolerance}
-            onSliderChange={(value) => trackStore.setRdpTolerance(value)}
-          />
-
-          <FilterBlock
-            title="Сглаживание (Чайкин)"
-            description="Скругление острых углов на поворотах"
-            enabled={chaikin.enabled}
-            onToggle={(enabled) => trackStore.setChaikinEnabled(enabled)}
-            sliderLabel="Степень сглаживания"
-            sliderValue={`${chaikin.iterations} ит.`}
-            sliderMin={1}
-            sliderMax={3}
-            sliderStep={1}
-            currentValue={chaikin.iterations}
-            onSliderChange={(value) => trackStore.setChaikinIterations(value)}
-          />
         </div>
       )}
 

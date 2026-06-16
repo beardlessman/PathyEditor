@@ -1,3 +1,12 @@
+export type FilterId = 'movingAverage' | 'rdp' | 'chaikin' | 'stopFilter'
+
+export const DEFAULT_FILTER_ORDER: FilterId[] = [
+  'movingAverage',
+  'rdp',
+  'chaikin',
+  'stopFilter',
+]
+
 export interface StopFilterSettings {
   enabled: boolean
   radius: number
@@ -20,6 +29,7 @@ export interface ChaikinSettings {
 }
 
 export interface FilterSettings {
+  order: FilterId[]
   stopFilter: StopFilterSettings
   movingAverage: MovingAverageSettings
   rdp: RdpSettings
@@ -28,6 +38,7 @@ export interface FilterSettings {
 
 export function createDefaultFilterSettings(): FilterSettings {
   return {
+    order: [...DEFAULT_FILTER_ORDER],
     stopFilter: { enabled: false, radius: 40, durationSeconds: 60 },
     movingAverage: { enabled: false, windowSize: 5 },
     rdp: { enabled: false, tolerance: 1.0 },
@@ -37,6 +48,7 @@ export function createDefaultFilterSettings(): FilterSettings {
 
 export function cloneFilterSettings(settings: FilterSettings): FilterSettings {
   return {
+    order: [...settings.order],
     stopFilter: { ...settings.stopFilter },
     movingAverage: { ...settings.movingAverage },
     rdp: { ...settings.rdp },
