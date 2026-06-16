@@ -96,6 +96,15 @@ export class TrackItem {
     this.errorMessage = null
   }
 
+  replaceRawPoints(points: TrackPoint[], originalFileName?: string): void {
+    this.rawPoints = cloneTrackPoints(points)
+    if (originalFileName) {
+      this.originalFileName = originalFileName
+    }
+    this.status = 'ready'
+    this.errorMessage = null
+  }
+
   setError(message: string): void {
     this.status = 'error'
     this.errorMessage = message

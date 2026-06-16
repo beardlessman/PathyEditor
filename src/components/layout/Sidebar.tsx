@@ -3,6 +3,7 @@ import { FileImport } from '../import/FileImport'
 import { TrackList } from '../tracks/TrackList'
 import { MetricsPanel } from '../metrics/MetricsPanel'
 import { FilterPanel } from '../filters/FilterPanel'
+import { SegmentMergePanel } from '../merge/SegmentMergePanel'
 import { ElevationChart } from '../chart/ElevationChart'
 import { useStore } from '../../stores/StoreContext'
 
@@ -41,6 +42,7 @@ export const Sidebar = observer(function Sidebar() {
         <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
           <FileImport />
           <TrackList />
+          <SegmentMergePanel />
           <FilterPanel />
           <MetricsPanel />
           <ElevationChart />

@@ -75,12 +75,23 @@ export const TrackList = observer(function TrackList() {
             </button>
             <button
               type="button"
-              disabled={trackStore.selectedTracks.length === 0}
+              disabled={
+                trackStore.selectedTracks.length === 0 || trackStore.isSegmentMerging
+              }
               className="rounded-md bg-emerald-700 px-2.5 py-1 text-xs text-white enabled:hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => void handleBulkExport()}
             >
-              Экспортировать выбранные
-              {trackStore.selectedTracks.length > 3 ? ' (ZIP)' : ''}
+              {trackStore.isSegmentMerging ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-emerald-300/40 border-t-white" />
+                  Объединение…
+                </span>
+              ) : (
+                <>
+                  Экспортировать выбранные
+                  {trackStore.selectedTracks.length > 3 ? ' (ZIP)' : ''}
+                </>
+              )}
             </button>
           </div>
 

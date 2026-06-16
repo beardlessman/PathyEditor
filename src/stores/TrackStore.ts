@@ -6,12 +6,37 @@ import {
   type FilterId,
   type FilterSettings,
 } from '../types/filters'
+import {
+  createDefaultSegmentMergeSettings,
+  type MapboxProfile,
+  type SegmentMergePreviewGroup,
+  type SegmentMergeProgress,
+  type SegmentMergeSettings,
+  type SegmentMergeStatus,
+} from '../types/segmentMerge'
+import type { TrackStatus } from '../types/trackItem'
 import { TRACK_COLOR } from '../types/trackItem'
 import { TrackItem } from './TrackItem'
 import { GpxParseError, parseGpx, validateGpxExtension } from '../utils/gpx'
 import { exportSelectedTracks } from '../utils/export'
+import { cloneTrackPoints } from '../utils/filters/helpers'
+import {
+  analyzeSegmentMerge,
+  applySegmentMerge,
+  type MergeableSegment,
+} from '../utils/segmentMerge'
 
 const FILTER_DEBOUNCE_MS = 175
+
+interface TrackSnapshot {
+  id: string
+  originalFileName: string
+  rawPoints: TrackPoint[]
+  color: string
+  isSelected: boolean
+  status: TrackStatus
+  errorMessage: string | null
+}
 
 export class TrackStore {
   tracks: TrackItem[] = []
@@ -22,8 +47,20 @@ export class TrackStore {
   hoveredIndex: number | null = null
   selectedTrackId: string | null = null
   selectedIndex: number | null = null
+  segmentMergeSettings: SegmentMergeSettings = createDefaultSegmentMergeSettings()
+  segmentMergeStatus: SegmentMergeStatus = 'idle'
+  segmentMergeErrorMessage: string | null = null
+  segmentMergeProgress: SegmentMergeProgress | null = null
+  segmentMergePreview: SegmentMergePreviewGroup[] | null = null
+  segmentMergeExcludedTrackCount = 0
+  lastMergedPairCount = 0
+  lastMergedGroupCount = 0
+  segmentMergeApplied = false
 
   private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  private mergeSnapshot: TrackSnapshot[] | null = null
+  private segmentMergeClusteredGroups: MergeableSegment[][] | null = null
+  private segmentMergeRequestId = 0
 
   constructor() {
     makeAutoObservable(this)
@@ -106,6 +143,38 @@ export class TrackStore {
     return this.visibleTracks.flatMap((track) => track.polylineCoords)
   }
 
+  get isSegmentMerging(): boolean {
+    return this.segmentMergeStatus === 'loading'
+  }
+
+  get hasSegmentMergePreview(): boolean {
+    return this.segmentMergeStatus === 'preview' && (this.segmentMergePreview?.length ?? 0) > 0
+  }
+
+  get canApplySegmentMerge(): boolean {
+    return this.hasSegmentMergePreview && !this.isSegmentMerging
+  }
+
+  get canUseSegmentMerge(): boolean {
+    return this.readyTracks.filter((track) => track.hasTimeData).length >= 2
+  }
+
+  get tracksWithoutTimeCount(): number {
+    return this.readyTracks.filter((track) => !track.hasTimeData).length
+  }
+
+  getMergePreviewColor(trackId: string): string | null {
+    if (!this.segmentMergePreview) return null
+
+    for (const group of this.segmentMergePreview) {
+      if (group.trackIds.includes(trackId)) {
+        return group.color
+      }
+    }
+
+    return null
+  }
+
   async importFiles(files: FileList | File[]): Promise<void> {
     const fileArray = Array.from(files).filter((file) =>
       file.name.toLowerCase().endsWith('.gpx'),
@@ -148,6 +217,12 @@ export class TrackStore {
         }
       }),
     )
+
+    if (this.segmentMergeSettings.enabled) {
+      this.mergeSnapshot = null
+      this.saveMergeSnapshot()
+      void this.analyzeSegmentMerge()
+    }
   }
 
   removeTrack(id: string): void {
@@ -176,6 +251,17 @@ export class TrackStore {
     this.selectedTrackId = null
     this.selectedIndex = null
     this.globalFilterSettings = createDefaultFilterSettings()
+    this.segmentMergeSettings = createDefaultSegmentMergeSettings()
+    this.mergeSnapshot = null
+    this.segmentMergeClusteredGroups = null
+    this.segmentMergeStatus = 'idle'
+    this.segmentMergeErrorMessage = null
+    this.segmentMergeProgress = null
+    this.segmentMergePreview = null
+    this.segmentMergeExcludedTrackCount = 0
+    this.lastMergedPairCount = 0
+    this.lastMergedGroupCount = 0
+    this.segmentMergeApplied = false
     this.flushDebouncedFilterUpdate()
   }
 
@@ -302,6 +388,50 @@ export class TrackStore {
     this.flushDebouncedFilterUpdate()
   }
 
+  async setSegmentMergeEnabled(enabled: boolean): Promise<void> {
+    this.segmentMergeSettings.enabled = enabled
+
+    if (enabled) {
+      this.saveMergeSnapshot()
+      await this.analyzeSegmentMerge()
+      return
+    }
+
+    this.clearSegmentMergeState()
+    this.restoreMergeSnapshot()
+  }
+
+  async applySegmentMergeAction(): Promise<void> {
+    if (!this.canApplySegmentMerge || !this.mergeSnapshot || !this.segmentMergeClusteredGroups) {
+      return
+    }
+
+    await this.runSegmentMergeApply()
+  }
+
+  setSegmentMergeMinGapMinutes(minGapMinutes: number): void {
+    const { segmentMergeSettings } = this
+    segmentMergeSettings.minGapMinutes = Math.min(minGapMinutes, segmentMergeSettings.maxGapMinutes)
+    if (segmentMergeSettings.enabled) {
+      void this.reanalyzeSegmentMerge()
+    }
+  }
+
+  setSegmentMergeMaxGapMinutes(maxGapMinutes: number): void {
+    const { segmentMergeSettings } = this
+    segmentMergeSettings.maxGapMinutes = Math.max(maxGapMinutes, segmentMergeSettings.minGapMinutes)
+    if (segmentMergeSettings.enabled) {
+      void this.reanalyzeSegmentMerge()
+    }
+  }
+
+  setSegmentMergeProfile(profile: MapboxProfile): void {
+    this.segmentMergeSettings.profile = profile
+    if (this.segmentMergeSettings.enabled) {
+      void this.reanalyzeSegmentMerge()
+    }
+  }
+
   setHoveredTrack(trackId: string | null, index: number | null): void {
     this.hoveredTrackId = trackId
     this.hoveredIndex = index
@@ -351,5 +481,250 @@ export class TrackStore {
     }
 
     this.debouncedGlobalFilterSettings = cloneFilterSettings(this.globalFilterSettings)
+  }
+
+  private saveMergeSnapshot(): void {
+    if (this.mergeSnapshot !== null) return
+
+    this.mergeSnapshot = this.tracks.map((track) => ({
+      id: track.id,
+      originalFileName: track.originalFileName,
+      rawPoints: cloneTrackPoints(track.rawPoints),
+      color: track.color,
+      isSelected: track.isSelected,
+      status: track.status,
+      errorMessage: track.errorMessage,
+    }))
+  }
+
+  private restoreMergeSnapshot(): void {
+    if (!this.mergeSnapshot) return
+
+    const activeId = this.activeTrackId
+    this.tracks = this.mergeSnapshot.map((snapshot) => {
+      const track = new TrackItem(
+        snapshot.id,
+        snapshot.originalFileName,
+        snapshot.color,
+        () => this.debouncedGlobalFilterSettings,
+      )
+      track.isSelected = snapshot.isSelected
+      if (snapshot.status === 'ready') {
+        track.setReady(snapshot.rawPoints)
+      } else if (snapshot.status === 'error') {
+        track.setError(snapshot.errorMessage ?? 'Ошибка трека')
+      }
+      return track
+    })
+
+    this.mergeSnapshot = null
+    this.activeTrackId = this.tracks.some((track) => track.id === activeId)
+      ? activeId
+      : (this.readyTracks[0]?.id ?? null)
+  }
+
+  private applyMergedTracks(
+    mergedTracks: Array<{
+      fileName: string
+      color: string
+      isSelected: boolean
+      rawPoints: TrackPoint[]
+    }>,
+  ): void {
+    const previousActiveId = this.activeTrackId
+    this.tracks = mergedTracks.map((segment) => {
+      const track = this.createTrackItem(segment.fileName)
+      track.color = segment.color
+      track.isSelected = segment.isSelected
+      track.setReady(segment.rawPoints)
+      return track
+    })
+
+    if (previousActiveId && this.tracks.some((track) => track.id === previousActiveId)) {
+      this.activeTrackId = previousActiveId
+    } else {
+      this.activeTrackId = this.readyTracks[0]?.id ?? null
+    }
+
+    this.hoveredTrackId = null
+    this.hoveredIndex = null
+    this.selectedTrackId = null
+    this.selectedIndex = null
+  }
+
+  private clearSegmentMergeState(): void {
+    this.segmentMergeStatus = 'idle'
+    this.segmentMergeErrorMessage = null
+    this.segmentMergeProgress = null
+    this.segmentMergePreview = null
+    this.segmentMergeClusteredGroups = null
+    this.segmentMergeExcludedTrackCount = 0
+    this.lastMergedPairCount = 0
+    this.lastMergedGroupCount = 0
+    this.segmentMergeApplied = false
+  }
+
+  private buildSnapshotSegments(): MergeableSegment[] {
+    if (!this.mergeSnapshot) return []
+
+    return this.mergeSnapshot.map((snapshot) => ({
+      snapshotId: snapshot.id,
+      fileName: snapshot.originalFileName,
+      color: snapshot.color,
+      isSelected: snapshot.isSelected,
+      rawPoints: cloneTrackPoints(snapshot.rawPoints),
+    }))
+  }
+
+  private getMergeOptions() {
+    return {
+      minGapMinutes: this.segmentMergeSettings.minGapMinutes,
+      maxGapMinutes: this.segmentMergeSettings.maxGapMinutes,
+      profile: this.segmentMergeSettings.profile,
+    }
+  }
+
+  private async reanalyzeSegmentMerge(): Promise<void> {
+    if (this.segmentMergeApplied) {
+      this.restoreMergeSnapshot()
+      this.mergeSnapshot = null
+      this.segmentMergeApplied = false
+      this.saveMergeSnapshot()
+    }
+
+    await this.analyzeSegmentMerge()
+  }
+
+  private async analyzeSegmentMerge(): Promise<void> {
+    if (!this.segmentMergeSettings.enabled) return
+
+    if (!this.canUseSegmentMerge) {
+      runInAction(() => {
+        this.segmentMergeSettings.enabled = false
+        this.mergeSnapshot = null
+        this.clearSegmentMergeState()
+        this.segmentMergeStatus = 'error'
+        this.segmentMergeErrorMessage =
+          'Для объединения нужно минимум 2 трека с метками времени на всех точках'
+      })
+      return
+    }
+
+    if (!this.mergeSnapshot) {
+      this.saveMergeSnapshot()
+    }
+
+    const requestId = this.segmentMergeRequestId + 1
+    this.segmentMergeRequestId = requestId
+
+    runInAction(() => {
+      this.segmentMergeStatus = 'loading'
+      this.segmentMergeProgress = {
+        phase: 'clustering',
+        message: 'Поиск групп…',
+        current: 0,
+        total: 1,
+      }
+      this.segmentMergeErrorMessage = null
+      this.segmentMergePreview = null
+      this.segmentMergeClusteredGroups = null
+    })
+
+    await Promise.resolve()
+
+    if (requestId !== this.segmentMergeRequestId) return
+
+    const sourceTracks = this.buildSnapshotSegments()
+    const analysis = analyzeSegmentMerge(sourceTracks, this.getMergeOptions())
+
+    runInAction(() => {
+      this.segmentMergePreview = analysis.previewGroups
+      this.segmentMergeClusteredGroups = analysis.clusteredGroups
+      this.segmentMergeExcludedTrackCount = analysis.excludedTrackCount
+      this.segmentMergeProgress = {
+        phase: 'clustering',
+        message:
+          analysis.previewGroups.length > 0
+            ? `Найдено групп: ${analysis.previewGroups.length}`
+            : 'Подходящие группы не найдены',
+        current: 1,
+        total: 1,
+      }
+      this.segmentMergeStatus = 'preview'
+    })
+  }
+
+  private async runSegmentMergeApply(): Promise<void> {
+    if (!this.mergeSnapshot || !this.segmentMergeClusteredGroups) return
+
+    const requestId = this.segmentMergeRequestId + 1
+    this.segmentMergeRequestId = requestId
+    const groups = this.segmentMergeClusteredGroups
+    const sourceTracks = this.buildSnapshotSegments()
+
+    runInAction(() => {
+      this.segmentMergeStatus = 'loading'
+      this.segmentMergeProgress = {
+        phase: 'routing',
+        message: `Восстановление геометрии: 0 из ${groups.length}`,
+        current: 0,
+        total: groups.length,
+      }
+      this.segmentMergeErrorMessage = null
+    })
+
+    try {
+      const result = await applySegmentMerge(
+        sourceTracks,
+        groups,
+        this.getMergeOptions(),
+        (current, total) => {
+          if (requestId !== this.segmentMergeRequestId) return
+
+          runInAction(() => {
+            this.segmentMergeProgress = {
+              phase: 'routing',
+              message: `Восстановление геометрии: ${current} из ${total}`,
+              current,
+              total,
+            }
+          })
+        },
+      )
+
+      if (requestId !== this.segmentMergeRequestId) return
+
+      runInAction(() => {
+        this.applyMergedTracks(
+          result.tracks.map((segment) => ({
+            fileName: segment.fileName,
+            color: segment.color,
+            isSelected: segment.isSelected,
+            rawPoints: segment.rawPoints,
+          })),
+        )
+        this.lastMergedPairCount = result.mergedPairCount
+        this.lastMergedGroupCount = result.mergedGroupCount
+        this.segmentMergeApplied = true
+        this.segmentMergeStatus = 'idle'
+        this.segmentMergeProgress = null
+        this.segmentMergePreview = null
+        this.segmentMergeClusteredGroups = null
+        this.segmentMergeErrorMessage = null
+      })
+    } catch (error) {
+      if (requestId !== this.segmentMergeRequestId) return
+
+      runInAction(() => {
+        this.segmentMergeStatus = 'error'
+        this.segmentMergeErrorMessage =
+          error instanceof Error ? error.message : 'Не удалось объединить сегменты'
+        this.segmentMergeProgress = null
+        this.segmentMergeSettings.enabled = false
+        this.clearSegmentMergeState()
+        this.restoreMergeSnapshot()
+        this.mergeSnapshot = null
+      })
+    }
   }
 }

@@ -109,13 +109,37 @@ export const TrackMap = observer(function TrackMap() {
 
       <FitBoundsController />
 
-      {trackStore.visibleTracks.map((track) => (
-        <Polyline
-          key={track.id}
-          positions={track.polylineCoords}
-          pathOptions={{ color: track.color, weight: 4, opacity: 0.9 }}
-        />
-      ))}
+      {trackStore.visibleTracks.map((track) => {
+        const previewColor = trackStore.getMergePreviewColor(track.id)
+        const isInPreviewGroup = previewColor !== null
+
+        return (
+          <Polyline
+            key={track.id}
+            positions={track.polylineCoords}
+            pathOptions={{
+              color: previewColor ?? track.color,
+              weight: isInPreviewGroup ? 5 : 4,
+              opacity: isInPreviewGroup ? 1 : 0.9,
+            }}
+          />
+        )
+      })}
+
+      {trackStore.segmentMergePreview?.flatMap((group) =>
+        group.connections.map((connection, index) => (
+          <Polyline
+            key={`merge-preview-${group.id}-${index}`}
+            positions={[connection.from, connection.to]}
+            pathOptions={{
+              color: group.color,
+              weight: 3,
+              opacity: 0.85,
+              dashArray: '8 8',
+            }}
+          />
+        )),
+      )}
 
       {trackStore.hasTrack && (
         <>
