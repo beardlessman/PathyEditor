@@ -3,7 +3,6 @@ import { CircleMarker, Marker, Popup, Tooltip } from 'react-leaflet'
 import { observer } from 'mobx-react-lite'
 import { formatLocalDateTime } from '../../utils/geo'
 import { useStore } from '../../stores/StoreContext'
-import type { TrackItem } from '../../stores/TrackItem'
 import type { TrackPoint } from '../../types/track'
 
 const hoverIcon = L.divIcon({
@@ -17,45 +16,6 @@ function pointLabel(point: TrackPoint): string {
   const time = formatLocalDateTime(point.time)
   const elevation = point.ele !== undefined ? `${point.ele.toFixed(0)} м` : '—'
   return `Время: ${time}\nВысота: ${elevation}`
-}
-
-function TrackEndpoints({ track }: { track: TrackItem }) {
-  const start = track.points[0]
-  const finish = track.points[track.points.length - 1]
-
-  if (!start) return null
-
-  return (
-    <>
-      <CircleMarker
-        center={[start.lat, start.lon]}
-        radius={7}
-        pathOptions={{ color: '#ffffff', fillColor: track.color, fillOpacity: 1, weight: 2 }}
-      >
-        <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-          Старт: {track.originalFileName}
-        </Tooltip>
-        <Popup>
-          <div className="text-sm whitespace-pre-line">{pointLabel(start)}</div>
-        </Popup>
-      </CircleMarker>
-
-      {finish && finish !== start && (
-        <CircleMarker
-          center={[finish.lat, finish.lon]}
-          radius={7}
-          pathOptions={{ color: '#ffffff', fillColor: track.color, fillOpacity: 0.7, weight: 2 }}
-        >
-          <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-            Финиш: {track.originalFileName}
-          </Tooltip>
-          <Popup>
-            <div className="text-sm whitespace-pre-line">{pointLabel(finish)}</div>
-          </Popup>
-        </CircleMarker>
-      )}
-    </>
-  )
 }
 
 export const TrackMarkers = observer(function TrackMarkers() {
@@ -74,10 +34,6 @@ export const TrackMarkers = observer(function TrackMarkers() {
 
   return (
     <>
-      {trackStore.visibleTracks.map((track) => (
-        <TrackEndpoints key={track.id} track={track} />
-      ))}
-
       {hovered && hoveredTrackId && (
         <Marker position={[hovered.lat, hovered.lon]} icon={hoverIcon}>
           <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>

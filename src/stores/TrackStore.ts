@@ -5,7 +5,7 @@ import {
   createDefaultFilterSettings,
   type FilterSettings,
 } from '../types/filters'
-import { TRACK_COLORS } from '../types/trackItem'
+import { TRACK_COLOR } from '../types/trackItem'
 import { TrackItem } from './TrackItem'
 import { GpxParseError, parseGpx, validateGpxExtension } from '../utils/gpx'
 import { exportSelectedTracks } from '../utils/export'
@@ -23,7 +23,6 @@ export class TrackStore {
   selectedIndex: number | null = null
 
   private filterDebounceTimer: ReturnType<typeof setTimeout> | null = null
-  private colorIndex = 0
 
   constructor() {
     makeAutoObservable(this)
@@ -282,13 +281,10 @@ export class TrackStore {
   }
 
   private createTrackItem(originalFileName: string): TrackItem {
-    const color = TRACK_COLORS[this.colorIndex % TRACK_COLORS.length]
-    this.colorIndex += 1
-
     return new TrackItem(
       crypto.randomUUID(),
       originalFileName,
-      color,
+      TRACK_COLOR,
       () => this.debouncedGlobalFilterSettings,
     )
   }
