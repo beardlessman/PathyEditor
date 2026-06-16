@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite'
+import { useState } from 'react'
 import { formatStopDuration } from '../../types/filters'
 import { useStore } from '../../stores/StoreContext'
 
@@ -149,6 +150,7 @@ function formatChangePercent(percent: number | null): string {
 
 export const FilterPanel = observer(function FilterPanel() {
   const { trackStore } = useStore()
+  const [isExpanded, setIsExpanded] = useState(true)
   const { stopFilter, movingAverage, rdp, chaikin } = trackStore.globalFilterSettings
   const changePercent = trackStore.pointCountChangePercent
   const tracksWithoutTime = trackStore.readyTracks.filter((track) => !track.hasTimeData).length
@@ -163,68 +165,85 @@ export const FilterPanel = observer(function FilterPanel() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Фильтры
-      </h2>
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((expanded) => !expanded)}
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Фильтры
+        </h2>
+        <span
+          className={`text-xs text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          ▼
+        </span>
+      </button>
 
-      <StopFilterBlock
-        enabled={stopFilter.enabled}
-        onToggle={(enabled) => trackStore.setStopFilterEnabled(enabled)}
-        radius={stopFilter.radius}
-        durationSeconds={stopFilter.durationSeconds}
-        onRadiusChange={(value) => trackStore.setStopFilterRadius(value)}
-        onDurationChange={(value) => trackStore.setStopFilterDuration(value)}
-      />
+      {isExpanded && (
+        <div className="space-y-3">
+          <StopFilterBlock
+            enabled={stopFilter.enabled}
+            onToggle={(enabled) => trackStore.setStopFilterEnabled(enabled)}
+            radius={stopFilter.radius}
+            durationSeconds={stopFilter.durationSeconds}
+            onRadiusChange={(value) => trackStore.setStopFilterRadius(value)}
+            onDurationChange={(value) => trackStore.setStopFilterDuration(value)}
+          />
 
-      {stopFilter.enabled && tracksWithoutTime > 0 && (
-        <p className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
-          ⚠️ У {tracksWithoutTime}{' '}
-          {tracksWithoutTime === 1 ? 'трека' : 'треков'} фильтр остановок недоступен: отсутствуют
-          метки времени
-        </p>
+          {stopFilter.enabled && tracksWithoutTime > 0 && (
+            <p className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+              ⚠️ У {tracksWithoutTime}{' '}
+              {tracksWithoutTime === 1 ? 'трека' : 'треков'} фильтр остановок недоступен: отсутствуют
+              метки времени
+            </p>
+          )}
+
+          <FilterBlock
+            title="Шумоподавление"
+            description="Скользящее среднее для сглаживания микро-колебаний"
+            enabled={movingAverage.enabled}
+            onToggle={(enabled) => trackStore.setMovingAverageEnabled(enabled)}
+            sliderLabel="Размер окна"
+            sliderValue={`${movingAverage.windowSize} точек`}
+            sliderMin={3}
+            sliderMax={99}
+            sliderStep={2}
+            currentValue={movingAverage.windowSize}
+            onSliderChange={(value) => trackStore.setMovingAverageWindowSize(value)}
+          />
+
+          <FilterBlock
+            title="Оптимизация (RDP)"
+            description="Удаление избыточных точек на прямых участках"
+            enabled={rdp.enabled}
+            onToggle={(enabled) => trackStore.setRdpEnabled(enabled)}
+            sliderLabel="Порог чувствительности"
+            sliderValue={`${rdp.tolerance.toFixed(1)} м`}
+            sliderMin={0.1}
+            sliderMax={10}
+            sliderStep={0.1}
+            currentValue={rdp.tolerance}
+            onSliderChange={(value) => trackStore.setRdpTolerance(value)}
+          />
+
+          <FilterBlock
+            title="Сглаживание (Чайкин)"
+            description="Скругление острых углов на поворотах"
+            enabled={chaikin.enabled}
+            onToggle={(enabled) => trackStore.setChaikinEnabled(enabled)}
+            sliderLabel="Степень сглаживания"
+            sliderValue={`${chaikin.iterations} ит.`}
+            sliderMin={1}
+            sliderMax={3}
+            sliderStep={1}
+            currentValue={chaikin.iterations}
+            onSliderChange={(value) => trackStore.setChaikinIterations(value)}
+          />
+        </div>
       )}
-
-      <FilterBlock
-        title="Шумоподавление"
-        description="Скользящее среднее для сглаживания микро-колебаний"
-        enabled={movingAverage.enabled}
-        onToggle={(enabled) => trackStore.setMovingAverageEnabled(enabled)}
-        sliderLabel="Размер окна"
-        sliderValue={`${movingAverage.windowSize} точек`}
-        sliderMin={3}
-        sliderMax={99}
-        sliderStep={2}
-        currentValue={movingAverage.windowSize}
-        onSliderChange={(value) => trackStore.setMovingAverageWindowSize(value)}
-      />
-
-      <FilterBlock
-        title="Оптимизация (RDP)"
-        description="Удаление избыточных точек на прямых участках"
-        enabled={rdp.enabled}
-        onToggle={(enabled) => trackStore.setRdpEnabled(enabled)}
-        sliderLabel="Порог чувствительности"
-        sliderValue={`${rdp.tolerance.toFixed(1)} м`}
-        sliderMin={0.1}
-        sliderMax={10}
-        sliderStep={0.1}
-        currentValue={rdp.tolerance}
-        onSliderChange={(value) => trackStore.setRdpTolerance(value)}
-      />
-
-      <FilterBlock
-        title="Сглаживание (Чайкин)"
-        description="Скругление острых углов на поворотах"
-        enabled={chaikin.enabled}
-        onToggle={(enabled) => trackStore.setChaikinEnabled(enabled)}
-        sliderLabel="Степень сглаживания"
-        sliderValue={`${chaikin.iterations} ит.`}
-        sliderMin={1}
-        sliderMax={3}
-        sliderStep={1}
-        currentValue={chaikin.iterations}
-        onSliderChange={(value) => trackStore.setChaikinIterations(value)}
-      />
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs leading-relaxed text-slate-300">
         <p>

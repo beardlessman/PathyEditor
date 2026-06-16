@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite'
+import { useState } from 'react'
 import { useStore } from '../../stores/StoreContext'
 
 function formatChangePercent(percent: number | null): string {
@@ -9,6 +10,7 @@ function formatChangePercent(percent: number | null): string {
 
 export const TrackList = observer(function TrackList() {
   const { trackStore, uiStore } = useStore()
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const handleSelectAll = () => trackStore.selectAllTracks()
   const handleClearAll = () => {
@@ -37,43 +39,58 @@ export const TrackList = observer(function TrackList() {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((expanded) => !expanded)}
+      >
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
           Треки ({trackStore.tracks.length})
         </h2>
-      </div>
+        <span
+          className={`text-xs text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          ▼
+        </span>
+      </button>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          onClick={handleSelectAll}
-        >
-          Выбрать все
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-          onClick={handleClearAll}
-        >
-          Очистить список
-        </button>
-        <button
-          type="button"
-          disabled={trackStore.selectedTracks.length === 0}
-          className="rounded-md bg-emerald-700 px-2.5 py-1 text-xs text-white enabled:hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-          onClick={() => void handleBulkExport()}
-        >
-          Экспортировать выбранные
-          {trackStore.selectedTracks.length > 3 ? ' (ZIP)' : ''}
-        </button>
-      </div>
+      {isExpanded && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              onClick={handleSelectAll}
+            >
+              Выбрать все
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              onClick={handleClearAll}
+            >
+              Очистить список
+            </button>
+            <button
+              type="button"
+              disabled={trackStore.selectedTracks.length === 0}
+              className="rounded-md bg-emerald-700 px-2.5 py-1 text-xs text-white enabled:hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void handleBulkExport()}
+            >
+              Экспортировать выбранные
+              {trackStore.selectedTracks.length > 3 ? ' (ZIP)' : ''}
+            </button>
+          </div>
 
-      <ul className="space-y-2">
-        {trackStore.tracks.map((track) => (
-          <TrackListItem key={track.id} trackId={track.id} />
-        ))}
-      </ul>
+          <ul className="space-y-2">
+            {trackStore.tracks.map((track) => (
+              <TrackListItem key={track.id} trackId={track.id} />
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   )
 })
