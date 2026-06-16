@@ -2,6 +2,7 @@ import type { FilterId, FilterSettings } from '../../types/filters'
 import type { TrackPoint } from '../../types/track'
 import { applyChaikin } from './chaikin'
 import { cloneTrackPoints } from './helpers'
+import { applyKalmanFilter } from './kalman'
 import { applyMovingAverage } from './movingAverage'
 import { applyRdp } from './rdp'
 import { applyStopFilter, hasTrackTimeData } from './stopFilter'
@@ -13,6 +14,14 @@ function applyFilterStep(
   settings: FilterSettings,
 ): TrackPoint[] {
   switch (filterId) {
+    case 'kalman':
+      if (!settings.kalman.enabled) return points
+      return applyKalmanFilter(
+        points,
+        settings.kalman.measurementNoise,
+        settings.kalman.processNoise,
+      )
+
     case 'movingAverage':
       if (!settings.movingAverage.enabled) return points
       return applyMovingAverage(points, settings.movingAverage.windowSize)

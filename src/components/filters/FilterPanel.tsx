@@ -65,6 +65,79 @@ function FilterBlock({
   )
 }
 
+interface KalmanFilterBlockProps {
+  enabled: boolean
+  measurementNoise: number
+  processNoise: number
+  onToggle: (enabled: boolean) => void
+  onMeasurementNoiseChange: (value: number) => void
+  onProcessNoiseChange: (value: number) => void
+}
+
+function KalmanFilterBlock({
+  enabled,
+  measurementNoise,
+  processNoise,
+  onToggle,
+  onMeasurementNoiseChange,
+  onProcessNoiseChange,
+}: KalmanFilterBlockProps) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={enabled}
+          className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+          onChange={(event) => onToggle(event.target.checked)}
+        />
+        <span>
+          <span className="block text-sm font-medium text-slate-100">Фильтр Калмана</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            Устраняет GPS-дрожание с учётом инерции движения
+          </span>
+        </span>
+      </label>
+
+      <div className={`mt-3 space-y-3 ${enabled ? '' : 'opacity-50'}`}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span>Погрешность измерения (R)</span>
+            <span className="font-medium text-slate-200">{measurementNoise} м</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={50}
+            step={1}
+            value={measurementNoise}
+            disabled={!enabled}
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-sky-500 disabled:cursor-not-allowed"
+            onChange={(event) => onMeasurementNoiseChange(Number(event.target.value))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span>Динамика движения (Q)</span>
+            <span className="font-medium text-slate-200">{processNoise.toFixed(1)}</span>
+          </div>
+          <input
+            type="range"
+            min={0.1}
+            max={5}
+            step={0.1}
+            value={processNoise}
+            disabled={!enabled}
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-sky-500 disabled:cursor-not-allowed"
+            onChange={(event) => onProcessNoiseChange(Number(event.target.value))}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface StopFilterBlockProps {
   enabled: boolean
   onToggle: (enabled: boolean) => void
@@ -208,7 +281,7 @@ function formatChangePercent(percent: number | null): string {
 export const FilterPanel = observer(function FilterPanel() {
   const { trackStore } = useStore()
   const [isExpanded, setIsExpanded] = useState(true)
-  const { stopFilter, movingAverage, rdp, chaikin, order } = trackStore.globalFilterSettings
+  const { kalman, stopFilter, movingAverage, rdp, chaikin, order } = trackStore.globalFilterSettings
   const changePercent = trackStore.pointCountChangePercent
   const tracksWithoutTime = trackStore.readyTracks.filter((track) => !track.hasTimeData).length
 
@@ -222,6 +295,18 @@ export const FilterPanel = observer(function FilterPanel() {
 
   const renderFilter = (filterId: FilterId) => {
     switch (filterId) {
+      case 'kalman':
+        return (
+          <KalmanFilterBlock
+            enabled={kalman.enabled}
+            measurementNoise={kalman.measurementNoise}
+            processNoise={kalman.processNoise}
+            onToggle={(enabled) => trackStore.setKalmanEnabled(enabled)}
+            onMeasurementNoiseChange={(value) => trackStore.setKalmanMeasurementNoise(value)}
+            onProcessNoiseChange={(value) => trackStore.setKalmanProcessNoise(value)}
+          />
+        )
+
       case 'movingAverage':
         return (
           <FilterBlock

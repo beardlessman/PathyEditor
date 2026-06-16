@@ -231,6 +231,21 @@ export class TrackStore {
     return { ok: true }
   }
 
+  setKalmanEnabled(enabled: boolean): void {
+    this.globalFilterSettings.kalman.enabled = enabled
+    this.flushDebouncedFilterUpdate()
+  }
+
+  setKalmanMeasurementNoise(measurementNoise: number): void {
+    this.globalFilterSettings.kalman.measurementNoise = measurementNoise
+    this.scheduleDebouncedFilterUpdate()
+  }
+
+  setKalmanProcessNoise(processNoise: number): void {
+    this.globalFilterSettings.kalman.processNoise = processNoise
+    this.scheduleDebouncedFilterUpdate()
+  }
+
   setMovingAverageEnabled(enabled: boolean): void {
     this.globalFilterSettings.movingAverage.enabled = enabled
     this.flushDebouncedFilterUpdate()

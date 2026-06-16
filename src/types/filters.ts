@@ -1,11 +1,18 @@
-export type FilterId = 'movingAverage' | 'rdp' | 'chaikin' | 'stopFilter'
+export type FilterId = 'kalman' | 'movingAverage' | 'rdp' | 'chaikin' | 'stopFilter'
 
 export const DEFAULT_FILTER_ORDER: FilterId[] = [
+  'kalman',
   'movingAverage',
   'rdp',
   'chaikin',
   'stopFilter',
 ]
+
+export interface KalmanSettings {
+  enabled: boolean
+  measurementNoise: number
+  processNoise: number
+}
 
 export interface StopFilterSettings {
   enabled: boolean
@@ -30,6 +37,7 @@ export interface ChaikinSettings {
 
 export interface FilterSettings {
   order: FilterId[]
+  kalman: KalmanSettings
   stopFilter: StopFilterSettings
   movingAverage: MovingAverageSettings
   rdp: RdpSettings
@@ -39,6 +47,7 @@ export interface FilterSettings {
 export function createDefaultFilterSettings(): FilterSettings {
   return {
     order: [...DEFAULT_FILTER_ORDER],
+    kalman: { enabled: false, measurementNoise: 7, processNoise: 1.0 },
     stopFilter: { enabled: false, radius: 40, durationSeconds: 60 },
     movingAverage: { enabled: false, windowSize: 17 },
     rdp: { enabled: false, tolerance: 3.0 },
@@ -49,6 +58,7 @@ export function createDefaultFilterSettings(): FilterSettings {
 export function cloneFilterSettings(settings: FilterSettings): FilterSettings {
   return {
     order: [...settings.order],
+    kalman: { ...settings.kalman },
     stopFilter: { ...settings.stopFilter },
     movingAverage: { ...settings.movingAverage },
     rdp: { ...settings.rdp },
