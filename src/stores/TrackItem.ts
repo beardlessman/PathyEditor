@@ -9,6 +9,7 @@ import {
   computeTotalDistanceKm,
 } from '../utils/geo'
 import { applyFilterPipeline } from '../utils/filters/pipeline'
+import { hasTrackTimeData } from '../utils/filters/stopFilter'
 import { cloneTrackPoints } from '../utils/filters/helpers'
 
 export class TrackItem {
@@ -34,6 +35,14 @@ export class TrackItem {
     this.color = color
     this.getDebouncedFilterSettings = getDebouncedFilterSettings
     makeAutoObservable(this)
+  }
+
+  get hasTimeData(): boolean {
+    return hasTrackTimeData(this.rawPoints)
+  }
+
+  get isStopFilterAvailable(): boolean {
+    return this.hasTimeData
   }
 
   get points(): TrackPoint[] {

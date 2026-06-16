@@ -260,6 +260,21 @@ export class TrackStore {
     this.scheduleDebouncedFilterUpdate()
   }
 
+  setStopFilterEnabled(enabled: boolean): void {
+    this.globalFilterSettings.stopFilter.enabled = enabled
+    this.flushDebouncedFilterUpdate()
+  }
+
+  setStopFilterRadius(radius: number): void {
+    this.globalFilterSettings.stopFilter.radius = radius
+    this.scheduleDebouncedFilterUpdate()
+  }
+
+  setStopFilterDuration(durationSeconds: number): void {
+    this.globalFilterSettings.stopFilter.durationSeconds = durationSeconds
+    this.scheduleDebouncedFilterUpdate()
+  }
+
   setHoveredTrack(trackId: string | null, index: number | null): void {
     this.hoveredTrackId = trackId
     this.hoveredIndex = index

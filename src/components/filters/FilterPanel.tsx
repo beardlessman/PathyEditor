@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite'
+import { formatStopDuration } from '../../types/filters'
 import { useStore } from '../../stores/StoreContext'
 
 interface FilterBlockProps {
@@ -63,6 +64,83 @@ function FilterBlock({
   )
 }
 
+interface StopFilterBlockProps {
+  enabled: boolean
+  onToggle: (enabled: boolean) => void
+  radius: number
+  durationSeconds: number
+  onRadiusChange: (value: number) => void
+  onDurationChange: (value: number) => void
+}
+
+function StopFilterBlock({
+  enabled,
+  onToggle,
+  radius,
+  durationSeconds,
+  onRadiusChange,
+  onDurationChange,
+}: StopFilterBlockProps) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={enabled}
+          className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+          onChange={(event) => onToggle(event.target.checked)}
+        />
+        <span>
+          <span className="block text-sm font-medium text-slate-100">
+            Фильтр остановок
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            Удаляет GPS-дрейф при длительных остановках
+          </span>
+        </span>
+      </label>
+
+      <div className={`mt-3 space-y-3 ${enabled ? '' : 'opacity-50'}`}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span>Радиус</span>
+            <span className="font-medium text-slate-200">{radius} метров</span>
+          </div>
+          <input
+            type="range"
+            min={5}
+            max={50}
+            step={5}
+            value={radius}
+            disabled={!enabled}
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-sky-500 disabled:cursor-not-allowed"
+            onChange={(event) => onRadiusChange(Number(event.target.value))}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span>Время</span>
+            <span className="font-medium text-slate-200">
+              {formatStopDuration(durationSeconds)}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={60}
+            max={900}
+            step={60}
+            value={durationSeconds}
+            disabled={!enabled}
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-sky-500 disabled:cursor-not-allowed"
+            onChange={(event) => onDurationChange(Number(event.target.value))}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function formatChangePercent(percent: number | null): string {
   if (percent === null) return '—'
   const sign = percent > 0 ? '+' : ''
@@ -71,8 +149,9 @@ function formatChangePercent(percent: number | null): string {
 
 export const FilterPanel = observer(function FilterPanel() {
   const { trackStore } = useStore()
-  const { movingAverage, rdp, chaikin } = trackStore.globalFilterSettings
+  const { stopFilter, movingAverage, rdp, chaikin } = trackStore.globalFilterSettings
   const changePercent = trackStore.pointCountChangePercent
+  const tracksWithoutTime = trackStore.readyTracks.filter((track) => !track.hasTimeData).length
 
   if (!trackStore.hasTrack) {
     return (
@@ -87,6 +166,23 @@ export const FilterPanel = observer(function FilterPanel() {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
         Фильтры
       </h2>
+
+      <StopFilterBlock
+        enabled={stopFilter.enabled}
+        onToggle={(enabled) => trackStore.setStopFilterEnabled(enabled)}
+        radius={stopFilter.radius}
+        durationSeconds={stopFilter.durationSeconds}
+        onRadiusChange={(value) => trackStore.setStopFilterRadius(value)}
+        onDurationChange={(value) => trackStore.setStopFilterDuration(value)}
+      />
+
+      {stopFilter.enabled && tracksWithoutTime > 0 && (
+        <p className="rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+          ⚠️ У {tracksWithoutTime}{' '}
+          {tracksWithoutTime === 1 ? 'трека' : 'треков'} фильтр остановок недоступен: отсутствуют
+          метки времени
+        </p>
+      )}
 
       <FilterBlock
         title="Шумоподавление"

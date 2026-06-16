@@ -112,6 +112,16 @@ const TrackListItem = observer(function TrackListItem({ trackId }: { trackId: st
             <span className="truncate text-sm font-medium text-slate-100">
               {track.originalFileName}
             </span>
+            {track.status === 'ready' &&
+              !track.hasTimeData &&
+              trackStore.globalFilterSettings.stopFilter.enabled && (
+                <span
+                  className="shrink-0 cursor-help text-amber-400"
+                  title="Фильтр остановок недоступен: отсутствуют метки времени"
+                >
+                  ⚠️
+                </span>
+              )}
           </div>
 
           {track.status === 'parsing' && (
